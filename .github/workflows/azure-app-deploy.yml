@@ -1,0 +1,59 @@
+name: Trigger auto deployment for vlrbotbot
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      - master
+    paths:
+      - 'app/**'
+      - '.github/workflows/azure-app-deploy.yml'
+
+  # Allow manual trigger 
+  workflow_dispatch:      
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write # This is required for requesting the OIDC JWT Token
+      contents: read # Required when GH token is used to authenticate with private repo
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.VLRBOT_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.VLRBOT_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.VLRBOT_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Docker Hub
+        run: |
+          echo "${{ secrets.VLRBOT_REGISTRY_PASSWORD }}" | docker login -u "${{ secrets.VLRBOT_REGISTRY_USERNAME }}" --password-stdin
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t bowens55/vlrbot:${{ github.sha }} \
+            -t bowens55/vlrbot:latest \
+            .
+          
+      - name: Push Docker image
+        run: |
+          docker push bowens55/vlrbot:${{ github.sha }}
+          docker push bowens55/vlrbot:latest
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }} 
+          registryUrl: docker.io
+          registryUsername: ${{ secrets.VLRBOT_REGISTRY_USERNAME }}
+          registryPassword: ${{ secrets.VLRBOT_REGISTRY_PASSWORD }}
+          containerAppName: prd-valobot-wes
+          resourceGroup: prd-valobot-wes
+          imageToBuild: bowens55/vlrbot:${{ github.sha }}

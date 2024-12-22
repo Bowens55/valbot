@@ -1,0 +1,7 @@
+discord.py
+python-dotenv
+apscheduler
+pytz
+requests
+opencensus-ext-azure
+opencensus-ext-logging
